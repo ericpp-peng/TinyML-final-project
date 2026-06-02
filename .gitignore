@@ -1,0 +1,31 @@
+.DS_Store
+*.tmp
+*.log
+
+# Large downloaded datasets and archives
+dataset/
+speech_commands_v0.02/
+speech_micro_train_2020_05_10.tgz
+v2.16.1.zip
+
+# TensorFlow source tree downloaded during notebook work
+tensorflow/
+
+# Training logs and checkpoints
+logs/
+logs_stop/
+train/
+train_stop/
+models/saved_model/
+models_stop/saved_model/
+*.ckpt*
+checkpoint
+events.out.tfevents.*
+
+# Local generated caches
+__pycache__/
+.ipynb_checkpoints/
+
+# Nested helper repository metadata
+extract_loudest_section/
+extract_loudest_section/.git/
