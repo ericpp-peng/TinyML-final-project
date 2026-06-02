@@ -26,6 +26,9 @@ events.out.tfevents.*
 __pycache__/
 .ipynb_checkpoints/
 
+# Personal recorded voice clips
+recorded_audio/
+
 # Nested helper repository metadata
 extract_loudest_section/
 extract_loudest_section/.git/
