@@ -25,6 +25,7 @@ events.out.tfevents.*
 # Local generated caches
 __pycache__/
 .ipynb_checkpoints/
+.venv/
 
 # Personal recorded voice clips
 recorded_audio/
