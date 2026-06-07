@@ -23,7 +23,7 @@ from typing import Iterable
 
 
 DEFAULT_BAUD = 115200
-DEFAULT_OUTPUT = "distraction_log.csv"
+DEFAULT_OUT_DIR = "result"
 
 
 @dataclass
@@ -87,8 +87,21 @@ def fieldnames() -> list[str]:
     ]
 
 
-def append_event(path: Path, event: DetectionEvent, port: str) -> None:
+def dated_csv_path(out_dir: Path, now: datetime) -> Path:
+    """One CSV per day: result/2026-06-06.csv."""
+    return out_dir / f"{now.strftime('%Y-%m-%d')}.csv"
+
+
+def append_event(out_dir: Path, event: DetectionEvent, port: str) -> Path:
+    """Append one detection to result/<today>.csv, creating it if needed.
+
+    Returns the path written so callers can show / verify it. The date is
+    stamped here by the PC (the board has no clock), and it also picks which
+    daily file the row lands in, so logging across midnight rolls over cleanly.
+    """
     now = datetime.now().astimezone()
+    path = dated_csv_path(out_dir, now)
+    ensure_header(path)
     row = {
         "timestamp_iso": now.isoformat(timespec="seconds"),
         "date": now.strftime("%Y-%m-%d"),
@@ -102,6 +115,7 @@ def append_event(path: Path, event: DetectionEvent, port: str) -> None:
     with path.open("a", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames())
         writer.writerow(row)
+    return path
 
 
 def dry_run_lines(keyword: str) -> Iterable[str]:
@@ -129,16 +143,16 @@ def list_ports() -> int:
 
 
 def run_logger(args: argparse.Namespace) -> int:
-    output = Path(args.output)
-    ensure_header(output)
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     if args.dry_run:
         for line in dry_run_lines(args.keyword):
             event = parse_detection(line, args.keyword)
             if event:
-                append_event(output, event, port="dry-run")
-                print(f"logged: {event.raw_line}")
-        print(f"Wrote dry-run events to {output}")
+                path = append_event(out_dir, event, port="dry-run")
+                print(f"logged: {event.raw_line} -> {path}")
+        print(f"Wrote dry-run events under {out_dir}/")
         return 0
 
     try:
@@ -147,7 +161,7 @@ def run_logger(args: argparse.Namespace) -> int:
         print("pyserial is not installed. Install it with: python3 -m pip install pyserial", file=sys.stderr)
         return 1
 
-    print(f"Listening on {args.port} at {args.baud} baud. Writing to {output}.")
+    print(f"Listening on {args.port} at {args.baud} baud. Writing daily CSVs under {out_dir}/.")
     print("Press Ctrl+C to stop.")
 
     try:
@@ -163,8 +177,8 @@ def run_logger(args: argparse.Namespace) -> int:
                     print(line)
                 event = parse_detection(line, args.keyword)
                 if event:
-                    append_event(output, event, port=args.port)
-                    print(f"logged: {event.raw_line}")
+                    path = append_event(out_dir, event, port=args.port)
+                    print(f"logged: {event.raw_line} -> {path}")
     except KeyboardInterrupt:
         print("\nStopped.")
         return 0
@@ -177,7 +191,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Log Arduino STOP detections from Serial to CSV.")
     parser.add_argument("--port", default="/dev/ttyACM0", help="Serial port, e.g. /dev/ttyACM0 or /dev/cu.usbmodemXXXX.")
     parser.add_argument("--baud", type=int, default=DEFAULT_BAUD, help=f"Serial baud rate. Default: {DEFAULT_BAUD}.")
-    parser.add_argument("--output", default=DEFAULT_OUTPUT, help=f"Output CSV path. Default: {DEFAULT_OUTPUT}.")
+    parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR, help=f"Folder for daily CSVs (one file per day, named YYYY-MM-DD.csv). Default: {DEFAULT_OUT_DIR}.")
     parser.add_argument("--keyword", default="STOP", help="Keyword to log. Default: STOP.")
     parser.add_argument("--warmup", type=float, default=2.0, help="Seconds to wait after opening Serial. Default: 2.")
     parser.add_argument("--echo", action="store_true", help="Print every Serial line, not only logged detections.")
