@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for serial_logger.py (the PC-side STOP receiver).
+"""Tests for serial_logger.py (the PC-side keyword receiver).
 
 Two layers:
   1. parse_detection() unit tests   -- pure logic, no hardware, no pyserial.
@@ -35,7 +35,7 @@ import serial_logger as sl  # noqa: E402  (path set above)
 
 
 # --------------------------------------------------------------------------
-# 1. parse_detection() unit tests -- the core "is this a STOP?" logic.
+# 1. parse_detection() unit tests -- the core "is this an event?" logic.
 # --------------------------------------------------------------------------
 
 def test_plain_stop_is_detected():
@@ -52,6 +52,18 @@ def test_stop_with_score_is_detected():
     assert event is not None
     assert event.event == "STOP"
     assert event.confidence == "0.875"
+
+
+def test_focus_time_with_score_is_detected():
+    event = sl.parse_detection("FOCUS_TIME,0.604", keyword="FOCUS_TIME")
+    assert event is not None
+    assert event.event == "FOCUS_TIME"
+    assert event.confidence == "0.604"
+
+
+def test_focus_time_debug_line_is_ignored():
+    """Debug output must not create an extra CSV row."""
+    assert sl.parse_detection("Heard focus_time (166) @102384ms", keyword="FOCUS_TIME") is None
 
 
 def test_noise_line_is_ignored():
@@ -132,6 +144,7 @@ def test_end_to_end_over_fake_serial():
         "--baud", "115200",
         "--out-dir", str(out_dir),
         "--warmup", "0",
+        "--keyword", "STOP",
     ]
     proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     try:

@@ -1,71 +1,88 @@
-# STOP keyword Arduino sketch
+# Focus Time Arduino Sketch
 
 This sketch is based on the Lab 4 `micro_speech` example. It continuously
 listens on the Arduino Nano 33 BLE Sense microphone, runs the TensorFlow Lite
-Micro keyword model, and prints one CSV-like line when a new high-confidence
-`stop` detection is accepted:
+Micro phrase model, and sends one CSV-like event line when a new
+high-confidence `focus_time` detection is accepted:
 
 ```text
-STOP,0.863
+FOCUS_TIME,0.604
 ```
 
-That line is compatible with `../serial_logger.py`.
+That line is compatible with `../serial_logger.py`. The PC-side logger stamps
+the real date/time because the board does not have a clock:
 
-## Important model note
-
-The copied `micro_features_model.cpp` is still the Lab 4 example model until
-you replace it. The sketch is wired for these output labels:
-
-```text
-silence, unknown, stop
+```sh
+python ../serial_logger.py --port /dev/cu.usbmodemXXXX --baud 115200 --keyword FOCUS_TIME
 ```
 
-So the replacement model must have 3 output scores in that same order, or you
-must update `micro_features_micro_model_settings.{h,cpp}` to match your model.
+## Event Reporting
 
-For this Lab 4 style pipeline, the model input must also match the sketch's
-feature settings:
-
-- 16 kHz audio
-- 1 second window
-- 40 feature bins
-- 49 slices
-- int8 input tensor with 1960 elements
-
-## Replacing the model
-
-In `TinyML_Lab4.ipynb`, set:
-
-```python
-WANTED_WORDS = "stop"
-```
-
-Then run the Lab 4 export cell that creates `kws.cc`:
-
-```python
-MODEL_TFLITE = '/content/models/model.tflite'
-MODEL_TFLITE_MICRO = 'kws.cc'
-!xxd -i {MODEL_TFLITE} > {MODEL_TFLITE_MICRO}
-REPLACE_TEXT = MODEL_TFLITE.replace('/', '_').replace('.', '_')
-!sed -i 's/'{REPLACE_TEXT}'/g_model/g' {MODEL_TFLITE_MICRO}
-```
-
-Copy the generated `g_model` array from `kws.cc` into
-`micro_features_model.cpp`, replacing the old hex array. Keep the exported
-symbols expected by `micro_features_model.h`:
+The sketch routes accepted detections through `../event_reporter/`:
 
 ```cpp
-const unsigned char g_model[] = { ... };
-const int g_model_len = ...;
+report_detection("FOCUS_TIME", score / 255.0f);
 ```
+
+The reporter owns the Serial event format and a 2-second cooldown, so one
+spoken phrase does not create several CSV rows. Debug output such as
+`Heard focus_time (...)` is not meant to be logged as an event.
+
+Build with the reporter folder as an Arduino library:
+
+```sh
+arduino-cli compile --fqbn arduino:mbed_nano:nano33ble \
+  --library ../event_reporter \
+  .
+```
+
+## Model Settings
+
+The current firmware is wired for these output labels:
+
+```text
+silence, unknown, focus_time, hard_negative
+```
+
+The model input uses the same Lab 4 micro feature pipeline, expanded to a
+2-second phrase window:
+
+- 16 kHz audio
+- 2 second window
+- 40 feature bins
+- 99 slices
+- int8 input tensor with 3960 elements
+
+If the model is retrained, keep `micro_features_micro_model_settings.{h,cpp}`
+consistent with the exported model's label order and feature dimensions.
+
+## Model Array Alignment
+
+Keep the Lab 4-style 4-byte alignment on `g_model` in
+`micro_features_model.cpp`:
+
+```cpp
+const unsigned char g_model[] DATA_ALIGN_ATTRIBUTE = { ... };
+```
+
+Without this alignment, the Nano 33 BLE application firmware can crash early
+when TensorFlow Lite Micro reads the FlatBuffer. When that happens, the USB
+serial port may disappear until the board is put into bootloader mode with a
+double reset.
 
 ## Tuning
 
-The final serial gate is in `arduino_command_responder.cpp`:
+The command recognizer is configured in `stop_log_micro_speech.ino`:
 
 ```cpp
-constexpr uint8_t kStopThreshold = 220;
+static RecognizeCommands static_recognizer(error_reporter, 1000, 150, 1500, 3);
 ```
 
-Lower it if real `STOP` commands are missed; raise it if normal speech creates
-false positives.
+The final trigger gate is in `arduino_command_responder.cpp`:
+
+```cpp
+constexpr uint8_t kTriggerThreshold = 150;
+```
+
+Lowering the threshold alone previously caused false positives. The current
+threshold works because the model has a dedicated `hard_negative` class.

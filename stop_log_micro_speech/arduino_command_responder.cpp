@@ -60,14 +60,7 @@ void RespondToCommand(tflite::ErrorReporter* error_reporter,
       digitalWrite(LEDR, LOW);
       digitalWrite(LEDG, HIGH);
       digitalWrite(LEDB, HIGH);
-      Serial.print("FOCUS_TIME,");
-      Serial.println(score / 255.0f, 3);
-      // Also route the event through the shared reporter module to exercise it
-      // on real hardware. Kept ALONGSIDE the line above (not replacing it) so
-      // the original output stays visible. Heads-up: this prints a second
-      // "STOP,<score>" line, so the PC logger records two rows per detection
-      // until the two Serial.print lines above are removed.
-      report_detection(score / 255.0f);
+      report_detection("FOCUS_TIME", score / 255.0f);
     }
   }
 

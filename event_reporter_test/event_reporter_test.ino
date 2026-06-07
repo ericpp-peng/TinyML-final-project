@@ -2,7 +2,7 @@
 // Flash this to the Arduino and it pretends the keyword model keeps firing:
 // it calls report_detection() on a fixed interval, so you can verify the whole
 // PC pipeline (Serial -> serial_logger.py -> test_result/<date>.csv) WITHOUT
-// having to actually speak "stop".
+// having to actually speak "focus time".
 //
 // The reporter module lives in its own folder (../event_reporter) so the real
 // firmware can share it. Pass that folder as a library when building:
@@ -12,8 +12,8 @@
 //       -p /dev/cu.usbmodemXXXX event_reporter_test
 //
 // On the PC, record into the test folder so it stays separate from real data:
-//   .venv/bin/python serial_logger.py --port /dev/cu.usbmodemXXXX \
-//       --baud 115200 --out-dir test_result
+//   python serial_logger.py --port /dev/cu.usbmodemXXXX \
+//       --baud 115200 --out-dir test_result --keyword FOCUS_TIME
 //
 // The built-in LED toggles on every send so you can see the board is alive.
 
@@ -34,6 +34,6 @@ void loop() {
   if (millis() - last_ms >= kSendIntervalMs) {
     last_ms = millis();
     digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-    report_detection();  // bare "STOP"; use report_detection(0.9f) to include a score
+    report_detection();  // bare "FOCUS_TIME"; use report_detection(0.9f) for a score
   }
 }

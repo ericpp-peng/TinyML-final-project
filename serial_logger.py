@@ -4,6 +4,7 @@
 Expected Arduino output examples:
   STOP
   STOP,0.91
+  FOCUS_TIME,0.61
   stop detected confidence=0.87
   {"event": "STOP", "confidence": 0.93}
 """
@@ -34,12 +35,13 @@ class DetectionEvent:
 
 
 def parse_detection(line: str, keyword: str) -> DetectionEvent | None:
-    """Return a detection when the serial line appears to contain the keyword."""
+    """Return a detection when the serial line is an explicit event record."""
     raw = line.strip()
     if not raw:
         return None
 
     lowered_keyword = keyword.lower()
+    canonical_event = keyword.upper()
 
     if raw.startswith("{") and raw.endswith("}"):
         try:
@@ -49,21 +51,28 @@ def parse_detection(line: str, keyword: str) -> DetectionEvent | None:
         event = str(payload.get("event", payload.get("label", ""))).strip()
         if event.lower() == lowered_keyword:
             confidence = payload.get("confidence", payload.get("score", ""))
-            return DetectionEvent(event=event.upper(), confidence=str(confidence), raw_line=raw)
+            return DetectionEvent(event=canonical_event, confidence=str(confidence), raw_line=raw)
 
-    if lowered_keyword not in raw.lower():
-        return None
-
-    confidence = ""
-    match = re.search(r"(?:confidence|score)\s*[=:]\s*([0-9]*\.?[0-9]+)", raw, re.I)
-    if match:
-        confidence = match.group(1)
-    else:
-        csv_like = [part.strip() for part in raw.split(",")]
+    csv_like = [part.strip() for part in raw.split(",")]
+    if csv_like and csv_like[0].lower() == lowered_keyword:
+        confidence = ""
         if len(csv_like) >= 2 and re.fullmatch(r"[0-9]*\.?[0-9]+", csv_like[1]):
             confidence = csv_like[1]
+        return DetectionEvent(event=canonical_event, confidence=confidence, raw_line=raw)
 
-    return DetectionEvent(event=keyword.upper(), confidence=confidence, raw_line=raw)
+    detected_match = re.fullmatch(
+        rf"{re.escape(keyword)}\s+detected(?:\s+(?:confidence|score)\s*[=:]\s*([0-9]*\.?[0-9]+))?",
+        raw,
+        re.I,
+    )
+    if detected_match:
+        return DetectionEvent(
+            event=canonical_event,
+            confidence=detected_match.group(1) or "",
+            raw_line=raw,
+        )
+
+    return None
 
 
 def ensure_header(path: Path) -> None:
@@ -188,11 +197,11 @@ def run_logger(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Log Arduino STOP detections from Serial to CSV.")
+    parser = argparse.ArgumentParser(description="Log Arduino keyword detections from Serial to CSV.")
     parser.add_argument("--port", default="/dev/ttyACM0", help="Serial port, e.g. /dev/ttyACM0 or /dev/cu.usbmodemXXXX.")
     parser.add_argument("--baud", type=int, default=DEFAULT_BAUD, help=f"Serial baud rate. Default: {DEFAULT_BAUD}.")
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR, help=f"Folder for daily CSVs (one file per day, named YYYY-MM-DD.csv). Default: {DEFAULT_OUT_DIR}.")
-    parser.add_argument("--keyword", default="STOP", help="Keyword to log. Default: STOP.")
+    parser.add_argument("--keyword", default="FOCUS_TIME", help="Keyword/event label to log. Default: FOCUS_TIME.")
     parser.add_argument("--warmup", type=float, default=2.0, help="Seconds to wait after opening Serial. Default: 2.")
     parser.add_argument("--echo", action="store_true", help="Print every Serial line, not only logged detections.")
     parser.add_argument("--dry-run", action="store_true", help="Write sample detections without opening Serial.")

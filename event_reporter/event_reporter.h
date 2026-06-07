@@ -1,14 +1,14 @@
 // event_reporter.h
-// Standalone "send a detection to the PC" module for the STOP & LOG project.
+// Standalone "send a detection to the PC" module for the voice logging project.
 //
-// The keyword model decides *whether* a STOP happened; this module owns
+// The keyword model decides *whether* a trigger phrase happened; this module owns
 // *reporting* it over Serial. Keeping them apart lets the model work and the
 // reporting work be developed and tested independently.
 //
 // Contract with the PC-side serial_logger.py:
-//   - one line per event: "STOP" (or "STOP,<score>")
+//   - one line per event: "FOCUS_TIME" (or "FOCUS_TIME,<score>")
 //   - the PC stamps the time; the board has no clock
-//   - a cooldown here collapses the repeated firings of one spoken word into
+//   - a cooldown here collapses the repeated firings of one spoken phrase into
 //     a single logged event
 //
 // Header-only and kept in its own folder so several sketches can share one
@@ -17,8 +17,9 @@
 //       --library ../event_reporter <sketch>
 //
 // To use it inside the real firmware (stop_log_micro_speech): #include
-// "event_reporter.h", call reporter_begin() in setup(), and report_detection()
-// where the model currently prints the STOP line.
+// "event_reporter.h" and call report_detection("FOCUS_TIME", score) where the
+// model currently detects the trigger phrase. The micro_speech firmware already
+// opens Serial, so reporter_begin() is mainly for standalone test sketches.
 
 #ifndef EVENT_REPORTER_H_
 #define EVENT_REPORTER_H_
@@ -29,6 +30,10 @@
 // single spoken "stop" is logged once instead of several times.
 #ifndef REPORTER_COOLDOWN_MS
 #define REPORTER_COOLDOWN_MS 2000
+#endif
+
+#ifndef REPORTER_DEFAULT_EVENT
+#define REPORTER_DEFAULT_EVENT "FOCUS_TIME"
 #endif
 
 // Open the Serial link to the PC. Call once from setup().
@@ -51,23 +56,33 @@ inline bool reporter_should_send() {
   return true;
 }
 
-// Report a detection with no score: sends the line "STOP".
-inline void report_detection() {
+// Report a detection with no score: sends the line "<event>".
+inline void report_detection(const char* event) {
   if (!reporter_should_send()) {
     return;
   }
-  Serial.println("STOP");
+  Serial.println(event);
 }
 
-// Report a detection with a confidence score in [0, 1]: sends "STOP,<score>".
-// This matches what the existing command responder already prints, so the PC
-// side parses it identically. Use this overload when you want the score logged.
-inline void report_detection(float score) {
+// Report a detection with no score using the default event label.
+inline void report_detection() {
+  report_detection(REPORTER_DEFAULT_EVENT);
+}
+
+// Report a detection with a confidence score in [0, 1]: sends "<event>,<score>".
+// Use this overload when you want the score logged by the PC side.
+inline void report_detection(const char* event, float score) {
   if (!reporter_should_send()) {
     return;
   }
-  Serial.print("STOP,");
+  Serial.print(event);
+  Serial.print(",");
   Serial.println(score, 3);
+}
+
+// Report a detection with a confidence score using the default event label.
+inline void report_detection(float score) {
+  report_detection(REPORTER_DEFAULT_EVENT, score);
 }
 
 #endif  // EVENT_REPORTER_H_
