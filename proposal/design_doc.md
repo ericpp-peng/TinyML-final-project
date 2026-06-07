@@ -171,7 +171,7 @@ A simple Python script reads from the Serial port and writes each detection even
 ### Current Behavior
 The deployed `focus_time` model is intentionally tuned for high precision. In live testing, normal speech and unrelated words did not trigger the logger, which is important because a false positive would create an incorrect distraction event. This is a strong result for the project goal: the system should only log when the user deliberately says the trigger phrase.
 
-The remaining issue is false negatives. The board can recognize `focus time`, but the user may need to say the phrase several times before the Serial output prints a detection. This means the current model is conservative: it avoids false positives, but sometimes misses true trigger phrases.
+The first deployed model was too conservative: it avoided false positives, but the user sometimes needed to say `focus time` more than once. The improved version adds a fourth output class, `hard_negative`, trained from personal recordings of normal speech and near-trigger phrases that should not fire. This makes the model explicitly distinguish the trigger phrase from similar non-trigger speech. After adding this class, the firmware threshold could be lowered while preserving the observed no-false-positive behavior. In informal live testing, `focus time` was detected on the first attempt while unrelated speech did not trigger the logger.
 
 ### Likely Causes of False Negatives
 
@@ -185,16 +185,16 @@ The remaining issue is false negatives. The board can recognize `focus time`, bu
 
 ### Strategy for Improving Recall
 
-The project will improve false negatives without sacrificing the current low false-positive rate. The planned approach is incremental:
+The project improved false negatives without sacrificing the current low false-positive rate. The implemented approach was incremental:
 
-1. **Preserve the current precision-first behavior.** Live testing showed that overly aggressive threshold changes and time-shift augmentation increased false positives. The deployed baseline is therefore kept as the safest current version.
-2. **Collect hard negative clips first.** Add normal speech and phrases that sound close to the trigger but should not fire, such as "focus", "work time", "phone time", "time", "timer", and ordinary conversation. This gives the model a clearer boundary between the trigger phrase and unrelated speech.
-3. **Collect more positive clips.** Add more `focus_time` recordings with natural variation: close/far microphone distance, soft/loud speech, fast/slow speech, and slightly different timing within the 2-second window.
-4. **Use modest data augmentation only after hard negatives are added.** Time shifting can help phrase alignment, but testing showed that using it alone made the model too permissive. It should be paired with hard negatives and validated with negative-speech tests.
-5. **Implement voice-activity-triggered capture carefully.** Instead of always classifying arbitrary sliding windows, detect when speech starts, hold a complete 2-second clip, and run inference on that aligned phrase window. A simple raw-score peak detector was tested and rejected because unrelated speech can also create high `focus_time` peaks; the improved version should classify a complete aligned phrase window rather than only tracking the maximum raw score.
+1. **Preserve the current precision-first behavior.** Live testing showed that overly aggressive threshold changes and time-shift augmentation increased false positives. Any recall improvement therefore had to keep false positives at zero during normal speech tests.
+2. **Collect hard negative clips.** Personal recordings were added for normal speech and phrases that sound close to the trigger but should not fire, such as "focus", "work time", "phone time", "time", "timer", and ordinary conversation.
+3. **Train hard negatives as an explicit class.** Adding hard negatives to the broad `unknown` class was not sufficient. Training a separate `hard_negative` output class gave the model a clearer boundary between the trigger phrase and near-trigger speech.
+4. **Lower the trigger threshold only after adding hard negatives.** Lowering the threshold alone caused false positives, but lowering it after adding the `hard_negative` class improved responsiveness while preserving the observed no-false-positive behavior.
+5. **Use modest data augmentation only after hard negatives are added.** Time shifting can help phrase alignment, but testing showed that using it alone made the model too permissive. It should be paired with hard negatives and validated with negative-speech tests.
 6. **Consider a two-stage detector.** Use a sensitive first stage to detect a possible `focus_time` peak, then confirm with a second high-confidence check before logging. This can improve recall while still rejecting unrelated speech.
 
-The preferred next step is collecting hard negatives, then retraining. This is more promising than simply lowering thresholds because the project must preserve the currently strong false-positive behavior while improving recall.
+The key implementation lesson is that recall could not be improved safely by simply lowering thresholds. The model first needed examples of realistic non-trigger speech. Once hard negatives were added as a dedicated class, the system became more responsive without reintroducing false positives in informal live testing.
 
 ---
 
@@ -202,12 +202,12 @@ The preferred next step is collecting hard negatives, then retraining. This is m
 
 | Challenge | Strategy |
 |-----------|----------|
-| False positives from normal speech | Include diverse personal unknown recordings such as "hello", "stop", "oh shoot", and ordinary speech |
+| False positives from normal speech | Include diverse personal recordings and train near-trigger speech as an explicit `hard_negative` class |
 | Acoustic mismatch between dataset (studio recordings) and real-world use | Supplement with personal recordings in the actual use environment |
 | Model size exceeding Flash memory limit | Apply 8-bit quantization; use DS-CNN architecture which is compact by design |
 | Serial logging reliability | Add simple handshake protocol; buffer missed events |
 | Phrase alignment with inference window | Current implementation uses a 2-second Lab 4-style sliding window; planned improvement is voice-activity-triggered 2-second capture |
-| False negatives for true trigger phrases | Tune detection threshold, collect more positive clips, augment timing, and align live inference using voice activity detection |
+| False negatives for true trigger phrases | Lower the trigger threshold only after hard-negative training, then validate with negative-speech and trigger recall tests |
 
 ---
 

@@ -46,7 +46,7 @@ void RespondToCommand(tflite::ErrorReporter* error_reporter,
   }
   static int32_t last_command_time = 0;
   static int count = 0;
-  constexpr uint8_t kTriggerThreshold = 200;
+  constexpr uint8_t kTriggerThreshold = 150;
   constexpr int32_t kLedHoldMs = 1500;
 
   if (is_new_command) {

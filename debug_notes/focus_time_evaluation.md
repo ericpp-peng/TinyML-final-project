@@ -115,6 +115,52 @@ Then retrain with both:
 
 This should improve recall while preserving the project's most important behavior: no false positives during unrelated speech.
 
+## v6: hard negatives as unknown
+
+This experiment added 40 personal hard-negative clips to the dataset, using them as part of the `unknown` class.
+
+### v6 offline result
+
+- Positive `focus_time` clips: 30 / 30 predicted as `focus_time`
+- Hard-negative clips: 14 / 40 still predicted as `focus_time`
+- Result: rejected before flashing to the board.
+
+This showed that simply adding hard negatives into the broad `unknown` pool was not strong enough. The hard negatives need to be represented as an explicit class so the model directly learns a separate boundary between `focus_time` and close non-trigger speech.
+
+## v7: hard negatives as an explicit class
+
+The next experiment trains four output classes:
+
+- `silence`
+- `unknown`
+- `focus_time`
+- `hard_negative`
+
+The firmware still only logs `focus_time`, but the extra class gives the model a dedicated target for speech that sounds close to the trigger without being the trigger.
+
+### v7 result
+
+- Offline positive check: 30 / 30 `focus_time` clips predicted as `focus_time`
+- Offline hard-negative check: 0 / 40 hard-negative clips predicted as `focus_time`
+- On-device negative speech check: invalid because the user had stepped away and was not speaking
+- On-device recall check: invalid because the user had stepped away and did not say the trigger phrase
+- Result: pending real on-device testing.
+
+The explicit hard-negative class successfully separated the recorded hard-negative clips in offline testing. The on-device result still needs to be measured with the user present. A follow-up experiment should test both the default threshold and a lower command threshold to see whether recall can recover while preserving the improved false-positive behavior.
+
+## v7a: explicit hard-negative class with lower threshold
+
+This version keeps the v7 four-class model but lowers the command threshold from 200 to 150.
+
+### v7a result
+
+- On-device negative speech check: invalid because the user had stepped away and was not speaking
+- On-device recall check: invalid because the user had stepped away and did not say the trigger phrase
+- Informal live test after the user returned: no false positives were observed during normal speech, and saying "focus time" was detected without needing a second attempt.
+- Result: current best version.
+
+The key improvement was not lowering the threshold alone. Earlier experiments showed that threshold relaxation without hard negatives caused false positives. v7a works better because the model has an explicit `hard_negative` class, giving it a separate output for close non-trigger speech. With that extra class in place, the firmware can use a lower `focus_time` threshold while still preserving the no-false-positive behavior observed in live testing.
+
 ## v5: event-based raw peak detector
 
 This experiment tested the hypothesis that the model may be correct, but the decision timing is poor. The firmware kept the baseline model, removed the Lab 4 averaged recognizer decision, and instead treated speech as an event:

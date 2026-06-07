@@ -19,4 +19,5 @@ const char* kCategoryLabels[kCategoryCount] = {
     "silence",
     "unknown",
     "focus_time",
+    "hard_negative",
 };
