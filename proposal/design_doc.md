@@ -187,14 +187,14 @@ The remaining issue is false negatives. The board can recognize `focus time`, bu
 
 The project will improve false negatives without sacrificing the current low false-positive rate. The planned approach is incremental:
 
-1. **Tune the trigger threshold carefully.** The current threshold was lowered from 220 to 200 after live testing showed true `focus_time` detections around this score. Further reductions should be tested gradually while monitoring false positives.
-2. **Collect more positive clips.** Add more `focus_time` recordings with natural variation: close/far microphone distance, soft/loud speech, fast/slow speech, and slightly different timing within the 2-second window.
-3. **Add hard negative clips.** Keep adding phrases that sound similar but should not trigger, such as "focus", "work time", "phone time", "time", and normal conversation. This allows threshold tuning without making the model too permissive.
-4. **Use data augmentation.** During training, add time shifting and background mixing so the model sees the phrase at different positions in the 2-second window.
-5. **Implement voice-activity-triggered capture.** Instead of always classifying arbitrary sliding windows, detect when speech starts, hold a complete 2-second clip, and run inference on that aligned phrase window. This directly addresses the timing mismatch.
+1. **Preserve the current precision-first behavior.** Live testing showed that overly aggressive threshold changes and time-shift augmentation increased false positives. The deployed baseline is therefore kept as the safest current version.
+2. **Collect hard negative clips first.** Add normal speech and phrases that sound close to the trigger but should not fire, such as "focus", "work time", "phone time", "time", "timer", and ordinary conversation. This gives the model a clearer boundary between the trigger phrase and unrelated speech.
+3. **Collect more positive clips.** Add more `focus_time` recordings with natural variation: close/far microphone distance, soft/loud speech, fast/slow speech, and slightly different timing within the 2-second window.
+4. **Use modest data augmentation only after hard negatives are added.** Time shifting can help phrase alignment, but testing showed that using it alone made the model too permissive. It should be paired with hard negatives and validated with negative-speech tests.
+5. **Implement voice-activity-triggered capture carefully.** Instead of always classifying arbitrary sliding windows, detect when speech starts, hold a complete 2-second clip, and run inference on that aligned phrase window. A simple raw-score peak detector was tested and rejected because unrelated speech can also create high `focus_time` peaks; the improved version should classify a complete aligned phrase window rather than only tracking the maximum raw score.
 6. **Consider a two-stage detector.** Use a sensitive first stage to detect a possible `focus_time` peak, then confirm with a second high-confidence check before logging. This can improve recall while still rejecting unrelated speech.
 
-The preferred next step is voice-activity-triggered capture because it addresses the main structural weakness of the current Lab 4-style streaming approach: the model was trained on complete 2-second clips, but live inference may see only a partial phrase.
+The preferred next step is collecting hard negatives, then retraining. This is more promising than simply lowering thresholds because the project must preserve the currently strong false-positive behavior while improving recall.
 
 ---
 
