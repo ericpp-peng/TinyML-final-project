@@ -57,7 +57,7 @@ The project uses a 2-second capture window so the full phrase can fit naturally 
 | Clip duration | 2 seconds |
 | Audio features | MFCC (Mel-Frequency Cepstral Coefficients) |
 
-### Personal Unknown Recordings
+### Personal Hard Negative Recordings
 To reduce false positives, the custom dataset also includes personal recordings of phrases that should **not** trigger the logger, such as:
 
 - "hello"
@@ -67,6 +67,8 @@ To reduce false positives, the custom dataset also includes personal recordings 
 - ordinary speech
 - short Chinese phrases
 - room noise and keyboard noise
+
+These examples were first tested as part of the broad `unknown` class, but that was not enough to separate close non-trigger speech from the target phrase. The final version trains them as an explicit `hard_negative` class, which gives the model a clearer boundary between `focus_time` and phrases that sound similar but should not create a log event.
 
 ---
 
@@ -107,7 +109,7 @@ COOLDOWN:
   - Well-suited for audio classification on microcontrollers
   - Significantly fewer parameters than standard CNNs
 - **Input:** Micro feature matrix (99 × 40) for a 2-second clip
-- **Output:** 3 classes — `silence`, `unknown`, and `focus_time`
+- **Output:** 4 classes — `silence`, `unknown`, `focus_time`, and `hard_negative`
 
 ### Compression for Deployment
 - **Post-Training Quantization:** Convert 32-bit float weights to 8-bit integers using TensorFlow Lite
@@ -167,6 +169,25 @@ A simple Python script reads from the Serial port and writes each detection even
 ---
 
 ## 5. Implementation Findings and Iteration Plan
+
+### Development and Debugging History
+The project began by following the Lab 4 `micro_speech` workflow as closely as possible. Edge Impulse was not required; the Lab 4-style notebook was enough to train a TensorFlow Lite Micro keyword model, export the model as a C/C++ byte array, and replace the model data in the Arduino sketch.
+
+The first target word was `stop`, using Speech Commands v0.02 as the public dataset. This confirmed that the notebook-to-firmware pipeline worked, but it also exposed two important issues. First, after uploading the generated STOP firmware, the Arduino serial port sometimes disappeared and upload/Serial Monitor only worked again after double reset. The upload process was not the real problem: double reset only forced the board into bootloader mode. The application firmware was likely crashing immediately after boot. Comparing against Lab 4 showed that the generated model array was missing the 4-byte `DATA_ALIGN_ATTRIBUTE` used by the original Lab 4 model. Adding the alignment macro back to `micro_features_model.cpp` fixed the serial-port drop and made the board stay visible after reset.
+
+Second, `stop` was too short and too common acoustically. It could be confused with unrelated speech, and even words such as `hello` could trigger false positives in some versions. Since this project values precision more than occasional missed detections, the trigger was changed from a single word to the more distinctive phrase `focus time`.
+
+The first deployed `focus_time` model used the Lab 4 sliding-window recognizer and produced no observed false positives, but recall was low: in one baseline test, it detected 15 out of 40 spoken attempts, or 37.5%. Several direct tuning attempts were rejected:
+
+| Attempt | Result |
+|---------|--------|
+| Lower threshold and shorter averaging window | Improved sensitivity but caused false positives during normal speech |
+| Shorter suppression window | Preserved precision but recall dropped to 27.5% |
+| Stronger time-shift augmentation | Helped alignment offline but caused false positives on-device |
+| Raw event-based peak detector | Detected score spikes, but produced false positives during unrelated speech |
+| Hard negatives mixed into `unknown` | Offline test still classified 14 / 40 hard negatives as `focus_time` |
+
+The successful change was to train personal hard negatives as a separate fourth class. With `hard_negative` as an explicit output, the model learned a clearer distinction between the target phrase and similar non-trigger speech. This allowed the firmware threshold to be lowered from 200 to 150 without bringing back the false positives observed in earlier experiments.
 
 ### Current Behavior
 The deployed `focus_time` model is intentionally tuned for high precision. In live testing, normal speech and unrelated words did not trigger the logger, which is important because a false positive would create an incorrect distraction event. This is a strong result for the project goal: the system should only log when the user deliberately says the trigger phrase.
