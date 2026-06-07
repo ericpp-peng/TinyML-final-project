@@ -15,6 +15,7 @@ import argparse
 import csv
 import json
 import re
+import signal
 import sys
 import time
 from dataclasses import dataclass
@@ -25,6 +26,7 @@ from typing import Iterable
 
 DEFAULT_BAUD = 115200
 DEFAULT_OUT_DIR = "result"
+STOP_REQUESTED = False
 
 
 @dataclass
@@ -151,16 +153,30 @@ def list_ports() -> int:
     return 0
 
 
+def request_stop(_signum: int, _frame: object) -> None:
+    global STOP_REQUESTED
+    STOP_REQUESTED = True
+
+
 def run_logger(args: argparse.Namespace) -> int:
+    global STOP_REQUESTED
+    STOP_REQUESTED = False
+    signal.signal(signal.SIGINT, request_stop)
+    signal.signal(signal.SIGTERM, request_stop)
+
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if args.dry_run:
+        logged_count = 0
         for line in dry_run_lines(args.keyword):
             event = parse_detection(line, args.keyword)
             if event:
                 path = append_event(out_dir, event, port="dry-run")
+                logged_count += 1
                 print(f"logged: {event.raw_line} -> {path}")
+                if args.max_events and logged_count >= args.max_events:
+                    break
         print(f"Wrote dry-run events under {out_dir}/")
         return 0
 
@@ -174,10 +190,14 @@ def run_logger(args: argparse.Namespace) -> int:
     print("Press Ctrl+C to stop.")
 
     try:
-        with serial.Serial(args.port, args.baud, timeout=1) as ser:
+        logged_count = 0
+        started_at = time.monotonic()
+        with serial.Serial(args.port, args.baud, timeout=0.2) as ser:
             time.sleep(args.warmup)
             ser.reset_input_buffer()
-            while True:
+            while not STOP_REQUESTED:
+                if args.duration and (time.monotonic() - started_at) >= args.duration:
+                    break
                 raw_bytes = ser.readline()
                 if not raw_bytes:
                     continue
@@ -187,7 +207,12 @@ def run_logger(args: argparse.Namespace) -> int:
                 event = parse_detection(line, args.keyword)
                 if event:
                     path = append_event(out_dir, event, port=args.port)
+                    logged_count += 1
                     print(f"logged: {event.raw_line} -> {path}")
+                    if args.max_events and logged_count >= args.max_events:
+                        break
+        print("\nStopped.")
+        return 0
     except KeyboardInterrupt:
         print("\nStopped.")
         return 0
@@ -203,6 +228,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR, help=f"Folder for daily CSVs (one file per day, named YYYY-MM-DD.csv). Default: {DEFAULT_OUT_DIR}.")
     parser.add_argument("--keyword", default="FOCUS_TIME", help="Keyword/event label to log. Default: FOCUS_TIME.")
     parser.add_argument("--warmup", type=float, default=2.0, help="Seconds to wait after opening Serial. Default: 2.")
+    parser.add_argument("--duration", type=float, default=0.0, help="Stop automatically after this many seconds. Default: 0, run until stopped.")
+    parser.add_argument("--max-events", type=int, default=0, help="Stop automatically after logging this many events. Default: 0, unlimited.")
     parser.add_argument("--echo", action="store_true", help="Print every Serial line, not only logged detections.")
     parser.add_argument("--dry-run", action="store_true", help="Write sample detections without opening Serial.")
     parser.add_argument("--list-ports", action="store_true", help="List available Serial ports and exit.")

@@ -116,6 +116,13 @@ The board has no real-time clock, so the PC timestamps each detection event.
 python serial_logger.py --port /dev/cu.usbmodemXXXX --baud 115200 --keyword FOCUS_TIME
 ```
 
+For a bounded test run, add either:
+
+```sh
+python serial_logger.py --port /dev/cu.usbmodemXXXX --baud 115200 --duration 60
+python serial_logger.py --port /dev/cu.usbmodemXXXX --baud 115200 --max-events 10
+```
+
 The logger writes one CSV per day under `result/` with columns:
 
 ```text
