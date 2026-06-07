@@ -166,7 +166,39 @@ A simple Python script reads from the Serial port and writes each detection even
 
 ---
 
-## 5. Challenges & Solutions
+## 5. Implementation Findings and Iteration Plan
+
+### Current Behavior
+The deployed `focus_time` model is intentionally tuned for high precision. In live testing, normal speech and unrelated words did not trigger the logger, which is important because a false positive would create an incorrect distraction event. This is a strong result for the project goal: the system should only log when the user deliberately says the trigger phrase.
+
+The remaining issue is false negatives. The board can recognize `focus time`, but the user may need to say the phrase several times before the Serial output prints a detection. This means the current model is conservative: it avoids false positives, but sometimes misses true trigger phrases.
+
+### Likely Causes of False Negatives
+
+| Cause | Explanation |
+|-------|-------------|
+| Sliding-window alignment | The firmware continuously classifies the latest 2-second audio window. If the phrase starts near the middle or edge of the window, the model may receive only part of the phrase. |
+| Recognition smoothing | The Lab 4 `RecognizeCommands` logic averages model outputs over time. This reduces noise, but can also suppress short high-confidence peaks. |
+| Conservative thresholding | The responder only logs `focus_time` when the averaged score is high enough. This protects against false positives, but lowers recall. |
+| Limited positive examples | The current personal dataset uses 30 `focus_time` clips. More examples with different distance, volume, speed, and timing would help the model generalize. |
+| Training/deployment mismatch | Offline clips are neatly 2 seconds long, while live speech can occur at any position inside the rolling audio buffer. |
+
+### Strategy for Improving Recall
+
+The project will improve false negatives without sacrificing the current low false-positive rate. The planned approach is incremental:
+
+1. **Tune the trigger threshold carefully.** The current threshold was lowered from 220 to 200 after live testing showed true `focus_time` detections around this score. Further reductions should be tested gradually while monitoring false positives.
+2. **Collect more positive clips.** Add more `focus_time` recordings with natural variation: close/far microphone distance, soft/loud speech, fast/slow speech, and slightly different timing within the 2-second window.
+3. **Add hard negative clips.** Keep adding phrases that sound similar but should not trigger, such as "focus", "work time", "phone time", "time", and normal conversation. This allows threshold tuning without making the model too permissive.
+4. **Use data augmentation.** During training, add time shifting and background mixing so the model sees the phrase at different positions in the 2-second window.
+5. **Implement voice-activity-triggered capture.** Instead of always classifying arbitrary sliding windows, detect when speech starts, hold a complete 2-second clip, and run inference on that aligned phrase window. This directly addresses the timing mismatch.
+6. **Consider a two-stage detector.** Use a sensitive first stage to detect a possible `focus_time` peak, then confirm with a second high-confidence check before logging. This can improve recall while still rejecting unrelated speech.
+
+The preferred next step is voice-activity-triggered capture because it addresses the main structural weakness of the current Lab 4-style streaming approach: the model was trained on complete 2-second clips, but live inference may see only a partial phrase.
+
+---
+
+## 6. Challenges & Solutions
 
 | Challenge | Strategy |
 |-----------|----------|
@@ -175,10 +207,11 @@ A simple Python script reads from the Serial port and writes each detection even
 | Model size exceeding Flash memory limit | Apply 8-bit quantization; use DS-CNN architecture which is compact by design |
 | Serial logging reliability | Add simple handshake protocol; buffer missed events |
 | Phrase alignment with inference window | Current implementation uses a 2-second Lab 4-style sliding window; planned improvement is voice-activity-triggered 2-second capture |
+| False negatives for true trigger phrases | Tune detection threshold, collect more positive clips, augment timing, and align live inference using voice activity detection |
 
 ---
 
-## 6. Estimated Timeline and Division of Work
+## 7. Estimated Timeline and Division of Work
 
 This is a solo project. The following timeline is planned across three weeks:
 
@@ -190,6 +223,6 @@ This is a solo project. The following timeline is planned across three weeks:
 
 ---
 
-## 7. Request for Additional Hardware
+## 8. Request for Additional Hardware
 
 No additional hardware is requested. This project uses only the **Arduino Nano 33 BLE Sense** already available, specifically its built-in microphone. All other components (PC for logging, USB cable) are standard and already on hand.
