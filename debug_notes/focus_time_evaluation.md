@@ -157,6 +157,11 @@ This version keeps the v7 four-class model but lowers the command threshold from
 - On-device negative speech check: invalid because the user had stepped away and was not speaking
 - On-device recall check: invalid because the user had stepped away and did not say the trigger phrase
 - Informal live test after the user returned: no false positives were observed during normal speech, and saying "focus time" was detected without needing a second attempt.
+- 60-second recall test:
+  - Spoken trigger attempts: 16
+  - Serial `FOCUS_TIME` detections: 15
+  - Recall: 15 / 16 = 93.75%
+  - Observed detection scores: approximately 0.604 to 0.682
 - Result: current best version.
 
 The key improvement was not lowering the threshold alone. Earlier experiments showed that threshold relaxation without hard negatives caused false positives. v7a works better because the model has an explicit `hard_negative` class, giving it a separate output for close non-trigger speech. With that extra class in place, the firmware can use a lower `focus_time` threshold while still preserving the no-false-positive behavior observed in live testing.
