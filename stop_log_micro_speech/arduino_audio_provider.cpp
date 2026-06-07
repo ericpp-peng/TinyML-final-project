@@ -42,7 +42,7 @@ limitations under the License.
 namespace {
 bool g_is_audio_initialized = false;
 // An internal buffer able to fit 16x our sample size
-constexpr int kAudioCaptureBufferSize = DEFAULT_PDM_BUFFER_SIZE * 16;
+constexpr int kAudioCaptureBufferSize = DEFAULT_PDM_BUFFER_SIZE * 64;
 int16_t g_audio_capture_buffer[kAudioCaptureBufferSize];
 // A buffer that holds our output
 int16_t g_audio_output_buffer[kMaxAudioSampleSize];

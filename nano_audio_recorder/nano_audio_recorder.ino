@@ -17,7 +17,7 @@
 namespace {
 constexpr int kSampleRate = 16000;
 constexpr int kChannels = 1;
-constexpr int kRecordingMs = 1000;
+constexpr int kRecordingMs = 2000;
 constexpr int kRecordingSamples = kSampleRate * kRecordingMs / 1000;
 constexpr unsigned long kRecordingTimeoutMs = 2500;
 constexpr int kSerialBaud = 921600;

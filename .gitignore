@@ -14,10 +14,20 @@ tensorflow/
 # Training logs and checkpoints
 logs/
 logs_stop/
+logs_oh_shoot/
+logs_focus_time/
 train/
 train_stop/
+train_oh_shoot/
+train_focus_time/
 models/saved_model/
 models_stop/saved_model/
+models_oh_shoot/saved_model/
+models_focus_time/saved_model/
+models_oh_shoot/
+models_focus_time/float_model.tflite
+kws_oh_shoot.cc
+prepare_oh_shoot_audio.py
 *.ckpt*
 checkpoint
 events.out.tfevents.*

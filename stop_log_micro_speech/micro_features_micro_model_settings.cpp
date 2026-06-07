@@ -18,5 +18,5 @@ limitations under the License.
 const char* kCategoryLabels[kCategoryCount] = {
     "silence",
     "unknown",
-    "stop",
+    "focus_time",
 };

@@ -44,18 +44,21 @@ void RespondToCommand(tflite::ErrorReporter* error_reporter,
   }
   static int32_t last_command_time = 0;
   static int count = 0;
-  constexpr uint8_t kStopThreshold = 220;
+  constexpr uint8_t kTriggerThreshold = 200;
   constexpr int32_t kLedHoldMs = 1500;
 
   if (is_new_command) {
-    TF_LITE_REPORT_ERROR(error_reporter, "Heard %s (%d) @%dms", found_command,
-                         score, current_time);
-    if ((strcmp(found_command, "stop") == 0) && (score >= kStopThreshold)) {
+    if (strcmp(found_command, "silence") != 0) {
+      TF_LITE_REPORT_ERROR(error_reporter, "Heard %s (%d) @%dms",
+                           found_command, score, current_time);
+    }
+    if ((strcmp(found_command, "focus_time") == 0) &&
+        (score >= kTriggerThreshold)) {
       last_command_time = current_time;
       digitalWrite(LEDR, LOW);
       digitalWrite(LEDG, HIGH);
       digitalWrite(LEDB, HIGH);
-      Serial.print("STOP,");
+      Serial.print("FOCUS_TIME,");
       Serial.println(score / 255.0f, 3);
     }
   }
